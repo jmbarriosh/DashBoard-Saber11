@@ -1,0 +1,11 @@
+{
+  "modelo_seleccionado": "3. Bosque ajustado",
+  "registros_totales": 60000,
+  "registros_prueba": 15000,
+  "tasa_bajo_puntaje": 0.24421666666666667,
+  "corte_puntaje_global": 216.0,
+  "auc_validacion_cruzada_ganador": 0.7777775979285652,
+  "auc_prueba_ganador": 0.7846632145388431,
+  "semilla": 42,
+  "criterio_seleccion": "Mayor ROC-AUC promedio en validacion cruzada de 5 particiones (solo entrenamiento); la prueba solo se usa para medir"
+}

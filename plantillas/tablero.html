@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Alerta temprana de bajo puntaje en Saber 11</title>
+<style>
+/*__ESTILOS__*/
+/* Controles propios de la version HTML */
+.multi{position:relative}.multi summary{list-style:none;cursor:pointer;border:1px solid #ccd6df;border-radius:6px;padding:9px 12px;background:white;font-size:14px;color:#22313F;display:flex;justify-content:space-between}
+.multi summary::-webkit-details-marker{display:none}.multi summary::after{content:"▾";color:#607586}
+.multi .panel{position:absolute;z-index:20;top:42px;left:0;right:0;background:white;border:1px solid #ccd6df;border-radius:6px;box-shadow:0 6px 18px #12304a26;max-height:300px;overflow:auto;padding:6px}
+.multi .panel label{display:flex;gap:8px;align-items:center;font-weight:400;margin:0;padding:5px 6px;border-radius:4px;cursor:pointer;font-size:13px}
+.multi .panel label:hover{background:#F4F7FA}.multi .panel input[type=search]{width:100%;padding:6px 8px;border:1px solid #DDE6EE;border-radius:4px;margin-bottom:4px}
+.multi .limpiar{font-size:12px;color:#1976D2;cursor:pointer;padding:4px 6px;display:inline-block}
+.anios{display:grid;grid-template-columns:1fr 1fr;gap:8px}.anios select{width:100%;padding:8px;border:1px solid #ccd6df;border-radius:6px;background:white}
+.tabs{display:flex;border-bottom:1px solid #DDE6EE;background:#eef2f6;border-radius:8px 8px 0 0;overflow:hidden}
+.tabs button{flex:1;border:0;background:transparent;padding:16px 10px;font-size:15px;color:#22313F;cursor:pointer;border-top:3px solid transparent}
+.tabs button.activa{background:white;border-top-color:#7b4fc9}.pestana{display:none}.pestana.activa{display:block}
+.grafico{background:white;border-radius:9px;box-shadow:0 2px 8px #12304a12;min-height:380px}
+.umbral-box input{width:100%}.umbral-valor{font-weight:700;color:#12304A;margin-left:6px}
+.tabla-wrap{overflow:auto;max-height:620px;background:white;border-radius:9px;box-shadow:0 2px 8px #12304a12}
+table.riesgo{border-collapse:collapse;width:100%;font-size:13px;font-family:Arial}
+table.riesgo th{position:sticky;top:0;background:#12304A;color:white;padding:9px 8px;text-align:left;cursor:pointer;white-space:nowrap}
+table.riesgo td{padding:8px;border-bottom:1px solid #EEF2F6;white-space:nowrap}table.riesgo tr.marcado td{background:#FCEFD6}
+table.riesgo td.num{text-align:right}
+</style>
+<script>/*__PLOTLY__*/</script>
+</head>
+<body>
+<div class="app">
+  <header class="hero">
+    <div>
+      <p class="eyebrow">PRUEBAS SABER 11 · ICFES · DATOS ABIERTOS</p>
+      <h1>Alerta temprana de bajo puntaje en Saber 11</h1>
+      <p class="subtitle" id="subtitulo"></p>
+    </div>
+    <div class="badge">HTML INTERACTIVO</div>
+  </header>
+  <div class="shell">
+    <aside class="sidebar">
+      <h3>Filtros</h3>
+      <label>Departamento del colegio</label><div id="f-depto"></div>
+      <label>Tipo de colegio</label><div id="f-naturaleza"></div>
+      <label>Zona</label><div id="f-area"></div>
+      <label>Calendario</label><div id="f-calendario"></div>
+      <label>Años</label>
+      <div class="anios"><select id="anio-desde"></select><select id="anio-hasta"></select></div>
+      <p class="help">El examen se aplica dos veces al año: en el 1.er semestre (sobre todo colegios de calendario B) y en el
+        2.º semestre (calendario A). El archivo del ICFES no trae el 2.º semestre de 2018, 2020 ni 2021.</p>
+      <button id="reset">Restablecer filtros</button>
+    </aside>
+    <main class="content">
+      <div class="kpi-grid">
+        <div class="kpi-card"><p class="kpi-title">Estudiantes</p><h2 id="kpi-n"></h2><p class="kpi-note">en la vista filtrada</p></div>
+        <div class="kpi-card"><p class="kpi-title">Con bajo puntaje</p><h2 id="kpi-rate"></h2><p class="kpi-note" id="kpi-rate-nota"></p></div>
+        <div class="kpi-card"><p class="kpi-title">Puntaje global promedio</p><h2 id="kpi-avg"></h2><p class="kpi-note">escala de 0 a 500</p></div>
+        <div class="kpi-card"><p class="kpi-title">Corte de bajo puntaje</p><h2 id="kpi-corte"></h2><p class="kpi-note">fijo para todos los años</p></div>
+      </div>
+      <div class="tabs">
+        <button data-tab="panorama" class="activa">Panorama</button>
+        <button data-tab="factores">Factores del estudiante y su hogar</button>
+        <button data-tab="modelo">Modelo</button>
+        <button data-tab="casos">Casos de mayor riesgo</button>
+      </div>
+      <section class="pestana activa" id="panorama">
+        <div class="grid-2"><div class="grafico" id="g-mapa"></div><div class="grafico" id="g-depto"></div></div>
+        <div class="grid-2">
+          <div class="grafico"><div class="radio">
+            <label><input type="radio" name="metrica" value="tasa" checked> % con bajo puntaje</label>
+            <label><input type="radio" name="metrica" value="promedio"> Puntaje promedio</label></div>
+            <div id="g-anio"></div></div>
+          <div class="grafico" id="g-dist"></div>
+        </div>
+        <div class="grid-1"><div class="grafico" id="g-estrato"></div></div>
+      </section>
+      <section class="pestana" id="factores">
+        <div class="grid-2"><div class="grafico" id="g-educ"></div><div class="grafico" id="g-bienes"></div></div>
+        <div class="grid-2"><div class="grafico" id="g-jornada"></div><div class="grafico" id="g-hacinamiento"></div></div>
+        <div class="grid-2"><div class="grafico" id="g-area"></div><div class="grafico" id="g-genero"></div></div>
+        <p class="help note" id="nota-factores"></p>
+      </section>
+      <section class="pestana" id="modelo">
+        <div class="umbral-row">
+          <div class="umbral-box"><label>Umbral del puntaje de riesgo: <span class="umbral-valor" id="umbral-valor">0,50</span></label>
+            <input type="range" id="umbral" min="0.2" max="0.8" step="0.05" value="0.5"></div>
+          <p class="help">Desde qué puntaje de riesgo el modelo marca a un estudiante. Más bajo = detecta más estudiantes, pero da
+            más falsas alarmas. No reentrena el modelo.</p>
+        </div>
+        <div class="metric-strip" id="metricas"></div>
+        <div class="grid-2"><div class="grafico" id="g-confusion"></div><div class="narrative" id="narrativa"></div></div>
+        <div class="grid-2"><div class="grafico" id="g-modelos"></div><div class="grafico" id="g-importancia"></div></div>
+      </section>
+      <section class="pestana" id="casos">
+        <p class="help note">Los 100 estudiantes del conjunto de prueba con mayor puntaje de riesgo, según los filtros. El identificador
+          es el consecutivo anónimo del ICFES; no hay nombres ni documentos. Clic en un encabezado para ordenar.</p>
+        <div class="tabla-wrap"><table class="riesgo" id="tabla"></table></div>
+      </section>
+      <footer id="footer"></footer>
+    </main>
+  </div>
+</div>
+<script>
+"use strict";
+const D = /*__DATOS__*/null;
+
+// ---------- configuracion (igual que app.py) ----------
+const AZUL = "#1976D2", DORADO = "#E0A21B", VERDE = "#26A6A1", GRIS = "#8A9BAA", NAVY = "#12304A";
+const SECUENCIAL = [[0, "#E3F0FB"], [0.333, "#7FB3E6"], [0.667, "#1976D2"], [1, "#0D3B66"]];
+const COLOR_NAT = {"Oficial": AZUL, "No Oficial": DORADO, "Sin dato": GRIS};
+const COLOR_SEM = {"2.º semestre": AZUL, "1.er semestre": DORADO};
+const MIN_EST = 30, TRAMO = 5;
+const CORTE = D.corte.corte_puntaje_global;
+const ORDEN = {
+  estrato: ["Sin estrato", "Estrato 1", "Estrato 2", "Estrato 3", "Estrato 4", "Estrato 5", "Estrato 6"],
+  educacion: ["Ninguno", "Primaria incompleta", "Primaria completa", "Secundaria incompleta", "Secundaria completa",
+              "Técnica incompleta", "Técnica completa", "Profesional incompleta", "Profesional completa", "Postgrado"],
+  hacinamiento: ["Hasta 1", "Más de 1 a 2", "Más de 2 a 3", "Más de 3"],
+};
+const NOMBRES = {departamento: "Departamento", jornada: "Jornada", edad: "Edad", anio: "Año", cuartos_hogar: "Cuartos del hogar",
+  area: "Zona (urbana/rural)", educacion_madre: "Educación madre", personas_por_cuarto: "Personas por cuarto",
+  educacion_padre: "Educación padre", genero_colegio: "Género del colegio", calendario: "Calendario", estrato: "Estrato",
+  naturaleza: "Tipo de colegio", tiene_computador: "Tiene computador", tiene_internet: "Tiene internet", genero: "Género",
+  educacion_max_padres: "Educación máx. padres", bilingue: "Colegio bilingüe", personas_hogar: "Personas en el hogar",
+  tiene_automovil: "Tiene automóvil", tiene_lavadora: "Tiene lavadora", bienes_hogar: "Bienes del hogar (0-4)", caracter: "Carácter del colegio"};
+const LAYOUT = {template: "plotly_white", separators: ",.", font: {family: "Inter, Segoe UI, Arial", color: "#22313F"},
+  margin: {l: 10, r: 10, t: 60, b: 10}, hoverlabel: {bgcolor: "white"}, paper_bgcolor: "white", plot_bgcolor: "white",
+  xaxis: {gridcolor: "#EEF2F6", automargin: true}, yaxis: {gridcolor: "#EEF2F6", automargin: true}};
+const CONFIG = {displaylogo: false, responsive: true, locale: "es"};
+
+// ---------- formato colombiano ----------
+const num = v => Math.round(v).toLocaleString("es-CO");
+const pct = (v, d = 1) => (v * 100).toFixed(d).replace(".", ",") + "%";
+const dec = v => v.toFixed(2).replace(".", ",");
+
+// ---------- tablas columnares ----------
+function tabla(t) {  // devuelve acceso por columna: valor de texto o numero
+  const get = {};
+  for (const c in t.col) get[c] = t.dic[c] ? (i => t.dic[c][t.col[c][i]]) : (i => t.col[c][i]);
+  return {n: t.n, col: t.col, dic: t.dic, get};
+}
+const RES = tabla(D.res), DIST = tabla(D.dist), PRED = tabla(D.pred);
+const ANIOS = [...new Set(D.res.col.anio)].sort((a, b) => a - b);
+const nombreDepto = c => D.deptos[c] || "Sin dato";
+
+// ---------- filtros ----------
+const estado = {deptos: [], naturaleza: [], area: [], calendario: [], desde: ANIOS[0], hasta: ANIOS[ANIOS.length - 1],
+                metrica: "tasa", umbral: 0.5, pestana: "panorama"};
+
+function multiselect(id, opciones, vacio, conBuscador) {
+  const cont = document.getElementById(id);
+  const det = document.createElement("details"); det.className = "multi"; cont.appendChild(det);
+  const sum = document.createElement("summary"); det.appendChild(sum);
+  const panel = document.createElement("div"); panel.className = "panel"; det.appendChild(panel);
+  if (conBuscador) {
+    const b = document.createElement("input"); b.type = "search"; b.placeholder = "Buscar...";
+    b.oninput = () => panel.querySelectorAll("label").forEach(l => l.style.display = l.textContent.toLowerCase().includes(b.value.toLowerCase()) ? "" : "none");
+    panel.appendChild(b);
+  }
+  const limpiar = document.createElement("span"); limpiar.className = "limpiar"; limpiar.textContent = "Quitar selección"; panel.appendChild(limpiar);
+  const checks = opciones.map(o => {
+    const l = document.createElement("label"); const c = document.createElement("input"); c.type = "checkbox"; c.value = o.value;
+    l.appendChild(c); l.appendChild(document.createTextNode(o.label)); panel.appendChild(l); return c;
+  });
+  const leer = () => checks.filter(c => c.checked).map(c => c.value);
+  const pintar = () => { const s = leer(); sum.textContent = s.length === 0 ? vacio : (s.length === 1 ? opciones.find(o => o.value === s[0]).label : s.length + " seleccionados"); };
+  checks.forEach(c => c.onchange = () => { pintar(); cont.dispatchEvent(new Event("cambio")); });
+  limpiar.onclick = () => { checks.forEach(c => c.checked = false); pintar(); cont.dispatchEvent(new Event("cambio")); };
+  document.addEventListener("click", e => { if (!det.contains(e.target)) det.open = false; });
+  pintar();
+  return {leer, poner: vals => { checks.forEach(c => c.checked = vals.includes(c.value)); pintar(); }};
+}
+
+const opc = (valores, etiqueta = v => v) => valores.map(v => ({value: v, label: etiqueta(v)}));
+const deptosOrden = [...D.res.dic.cod_depto].sort((a, b) => nombreDepto(a).localeCompare(nombreDepto(b), "es"));
+const MS = {
+  deptos: multiselect("f-depto", opc(deptosOrden, nombreDepto), "Todos los departamentos", true),
+  naturaleza: multiselect("f-naturaleza", opc(D.res.dic.naturaleza), "Oficial y no oficial"),
+  area: multiselect("f-area", opc(D.res.dic.area), "Urbana y rural"),
+  calendario: multiselect("f-calendario", opc(D.res.dic.calendario), "A, B y otro"),
+};
+
+function mascara(T, f) {  // indices de las filas que cumplen los filtros
+  const idx = [];
+  const sets = {};
+  for (const [k, col] of [["deptos", "cod_depto"], ["naturaleza", "naturaleza"], ["area", "area"], ["calendario", "calendario"]]) {
+    if (f[k].length) sets[col] = new Set(f[k].map(v => T.dic[col].indexOf(v)));
+  }
+  const an = T.col.anio;
+  for (let i = 0; i < T.n; i++) {
+    if (an[i] < f.desde || an[i] > f.hasta) continue;
+    let ok = true;
+    for (const col in sets) if (!sets[col].has(T.col[col][i])) { ok = false; break; }
+    if (ok) idx.push(i);
+  }
+  return idx;
+}
+
+function agrupar(idx, clave) {  // suma estudiantes, bajos y puntajes por clave
+  const m = new Map();
+  for (const i of idx) {
+    const k = clave(i);
+    let g = m.get(k); if (!g) { g = {clave: k, estudiantes: 0, bajo: 0, suma: 0}; m.set(k, g); }
+    g.estudiantes += RES.col.estudiantes[i]; g.bajo += RES.col.bajo[i]; g.suma += RES.col.suma_puntaje[i];
+  }
+  const out = [...m.values()];
+  out.forEach(g => { g.tasa = g.bajo / g.estudiantes; g.promedio = g.suma / g.estudiantes; });
+  return out;
+}
+
+function cuartiles(tramos, conteos) {
+  const o = tramos.map((t, i) => [t, conteos[i]]).sort((a, b) => a[0] - b[0]);
+  const t = o.map(x => x[0]), c = o.map(x => x[1]);
+  const n = c.reduce((a, b) => a + b, 0); const acum = []; let s = 0; for (const x of c) { s += x; acum.push(s); }
+  const q = p => { const k = p * n; let i = acum.findIndex(a => a >= k); if (i < 0) i = c.length - 1;
+                   const prev = i > 0 ? acum[i - 1] : 0; return t[i] + TRAMO * (k - prev) / c[i]; };
+  const q1 = q(0.25), med = q(0.5), q3 = q(0.75), riq = q3 - q1;
+  return {q1, mediana: med, q3, inferior: Math.max(t[0], q1 - 1.5 * riq), superior: Math.min(t[t.length - 1] + TRAMO - 1, q3 + 1.5 * riq), estudiantes: n};
+}
+
+// ---------- graficos ----------
+const L = extra => {  // une el diseno base con el de cada grafico (los ejes se combinan, no se reemplazan)
+  const base = JSON.parse(JSON.stringify(LAYOUT)), out = Object.assign(base, extra);
+  for (const eje of ["xaxis", "yaxis"]) out[eje] = Object.assign({}, LAYOUT[eje], extra[eje] || {});
+  if (out.title) out.title = Object.assign({x: 0.02, xanchor: "left"}, out.title);
+  return out;
+};
+function vacia(div, titulo) {
+  Plotly.react(div, [], L({title: {text: titulo}, height: 380, xaxis: {visible: false}, yaxis: {visible: false},
+    annotations: [{text: "No hay datos con estos filtros", showarrow: false, font: {size: 14, color: GRIS}}]}), CONFIG);
+}
+const HOVER = "<b>%{x}</b><br>Bajo puntaje: %{y:.1%}<br>Estudiantes: %{customdata[0]:,}<br>Puntaje promedio: %{customdata[1]:.0f}<extra></extra>";
+
+function barras(div, grupos, titulo, tasaTotal, opciones = {}) {
+  // grupos: [{x, serie?, estudiantes, tasa, promedio}]
+  const g = grupos.filter(r => r.estudiantes >= MIN_EST);
+  if (!g.length) return vacia(div, titulo);
+  const series = opciones.series || [null];
+  const orden = opciones.orden || [...new Set(g.map(r => r.x))];
+  const trazas = series.map(s => {
+    const filas = orden.map(x => g.find(r => r.x === x && (s === null || r.serie === s))).filter(Boolean);
+    return {type: "bar", name: s || "", x: filas.map(r => r.x), y: filas.map(r => r.tasa),
+            customdata: filas.map(r => [r.estudiantes, r.promedio]), hovertemplate: HOVER,
+            marker: {color: s === null ? AZUL : opciones.colores[s], line: {width: 0}},
+            text: opciones.texto === false ? null : filas.map(r => pct(r.tasa, 0)), textposition: "outside", cliponaxis: false,
+            showlegend: s !== null};
+  });
+  Plotly.react(div, trazas, L({title: {text: titulo}, height: opciones.alto || 380, barmode: "group",
+    bargap: orden.length <= 3 ? 0.5 : 0.25, bargroupgap: 0.08,
+    yaxis: {tickformat: ".0%", title: {text: "% con bajo puntaje"}, gridcolor: "#EEF2F6", automargin: true},
+    xaxis: {categoryorder: "array", categoryarray: orden, tickangle: opciones.angulo || 0, automargin: true},
+    legend: {orientation: "h", y: 1.02, x: 1, xanchor: "right", yanchor: "bottom"},
+    shapes: [{type: "line", xref: "paper", x0: 0, x1: 1, y0: tasaTotal, y1: tasaTotal, line: {dash: "dot", color: GRIS}}],
+    annotations: [{xref: "paper", x: 1, xanchor: "right", y: tasaTotal, yanchor: "bottom", showarrow: false,
+                   text: "promedio de la vista " + pct(tasaTotal, 0), font: {color: GRIS, size: 11}, bgcolor: "rgba(255,255,255,0.85)"}]}), CONFIG);
+}
+
+function calcularDatos(f) {  // todo lo que muestran las pestanas de datos
+  const idx = mascara(RES, f);
+  const v = RES.dic.variable, val = RES.get.valor, varCol = RES.col.variable;
+  const iVar = nombre => v.indexOf(nombre);
+  const tot = idx.filter(i => varCol[i] === iVar("Total"));
+  const total = agrupar(tot, () => "t")[0] || {estudiantes: 0};
+  const porVar = (nombre, clave) => agrupar(idx.filter(i => varCol[i] === iVar(nombre)), clave);
+  return {idx, tot, total, porVar, val};
+}
+
+function pintarDatos() {
+  const f = estado, r = calcularDatos(f), n = r.total.estudiantes;
+  document.getElementById("kpi-n").textContent = num(n);
+  document.getElementById("kpi-rate").textContent = n ? pct(r.total.tasa) : "--";
+  document.getElementById("kpi-avg").textContent = n ? num(r.total.promedio) : "--";
+  const ids = ["g-mapa", "g-depto", "g-anio", "g-dist", "g-estrato", "g-educ", "g-bienes", "g-jornada", "g-hacinamiento", "g-area", "g-genero"];
+  if (!n) { ids.forEach(id => vacia(id, "")); return; }
+  const tasa = r.total.tasa;
+
+  if (estado.pestana === "panorama") {
+    // Mapa y ranking
+    const dep = agrupar(r.tot, i => RES.get.cod_depto(i)).filter(d => d.estudiantes >= MIN_EST && D.deptos[d.clave]);
+    Plotly.react("g-mapa", [{type: "choroplethmap", geojson: D.geo, locations: dep.map(d => d.clave), z: dep.map(d => d.tasa),
+      customdata: dep.map(d => [nombreDepto(d.clave), d.estudiantes, d.promedio]), colorscale: SECUENCIAL,
+      marker: {line: {color: "white", width: 1}, opacity: 0.95},
+      colorbar: {tickformat: ".0%", thickness: 12, len: 0.6},
+      hovertemplate: "<b>%{customdata[0]}</b><br>Bajo puntaje: %{z:.1%}<br>Estudiantes: %{customdata[1]:,}<br>Puntaje promedio: %{customdata[2]:.0f}<extra></extra>"}],
+      L({title: {text: "% con bajo puntaje por departamento"}, height: 600, margin: {l: 0, r: 0, t: 60, b: 0},
+         map: {style: "white-bg", center: {lat: 4.4, lon: -73.6}, zoom: 4.2}}), CONFIG);
+    const depBar = dep.filter(d => d.estudiantes >= MIN_EST).sort((a, b) => a.tasa - b.tasa);
+    Plotly.react("g-depto", [{type: "bar", orientation: "h", x: depBar.map(d => d.tasa), y: depBar.map(d => nombreDepto(d.clave)),
+      customdata: depBar.map(d => [d.estudiantes, d.promedio]), text: depBar.map(d => pct(d.tasa, 0)), textposition: "outside",
+      cliponaxis: false, marker: {color: AZUL, line: {width: 0}},
+      hovertemplate: "<b>%{y}</b><br>Bajo puntaje: %{x:.1%}<br>Estudiantes: %{customdata[0]:,}<br>Puntaje promedio: %{customdata[1]:.0f}<extra></extra>"}],
+      L({title: {text: "Ranking de departamentos"}, height: 600, bargap: 0.25,
+         xaxis: {tickformat: ".0%", title: {text: "% con bajo puntaje"}, gridcolor: "#EEF2F6"},
+         yaxis: {dtick: 1, tickfont: {size: 11}, automargin: true},
+         shapes: [{type: "line", yref: "paper", y0: 0, y1: 1, x0: tasa, x1: tasa, line: {dash: "dot", color: GRIS}}]}), CONFIG);
+
+    // Tendencia por ano y semestre (los anos sin datos quedan como hueco)
+    const an = agrupar(r.tot, i => RES.col.anio[i] + "|" + RES.get.semestre(i)).filter(g => g.estudiantes >= MIN_EST);
+    if (!an.length) vacia("g-anio", "Tendencia por año");
+    else {
+      const anios = []; for (let a = f.desde; a <= f.hasta; a++) anios.push(a);
+      const sems = ["2.º semestre", "1.er semestre"].filter(s => an.some(g => g.clave.endsWith(s)));
+      const trazas = sems.map(s => {
+        const filas = anios.map(a => an.find(g => g.clave === a + "|" + s));
+        return {type: "scatter", mode: "lines+markers", name: s, x: anios, y: filas.map(g => g ? g[f.metrica] : null),
+                customdata: filas.map(g => g ? [g.estudiantes, g.tasa, g.promedio] : [null, null, null]),
+                line: {width: 2, color: COLOR_SEM[s]}, marker: {size: 9, color: COLOR_SEM[s]}, connectgaps: false,
+                hovertemplate: "<b>%{x}</b><br>Bajo puntaje: %{customdata[1]:.1%}<br>Puntaje promedio: %{customdata[2]:.0f}<br>Estudiantes: %{customdata[0]:,}<extra></extra>"};
+      });
+      Plotly.react("g-anio", trazas, L({title: {text: "Tendencia por año y semestre de aplicación"}, height: 420,
+        legend: {title: {text: "Aplicación"}}, xaxis: {tickmode: "array", tickvals: ANIOS, gridcolor: "#EEF2F6"},
+        yaxis: {tickformat: f.metrica === "tasa" ? ".0%" : "d", gridcolor: "#EEF2F6", automargin: true,
+                title: {text: f.metrica === "tasa" ? "% con bajo puntaje" : "Puntaje global promedio"}}}), CONFIG);
+    }
+
+    // Distribucion y velas
+    const di = mascara(DIST, f);
+    const porNat = {};
+    for (const i of di) {
+      const nat = DIST.get.naturaleza(i), t10 = Math.floor(DIST.col.tramo[i] / 10) * 10;
+      porNat[nat] = porNat[nat] || new Map(); porNat[nat].set(t10, (porNat[nat].get(t10) || 0) + DIST.col.estudiantes[i]);
+    }
+    const trazasDist = ["Oficial", "No Oficial"].filter(nat => porNat[nat]).map(nat => {
+      const m = porNat[nat], tramos = [...m.keys()].sort((a, b) => a - b), totalNat = [...m.values()].reduce((a, b) => a + b, 0);
+      return {type: "scatter", mode: "lines", line: {shape: "spline", width: 2, color: COLOR_NAT[nat]}, name: nat,
+              x: tramos.map(t => t + 5), y: tramos.map(t => m.get(t) / totalNat), customdata: tramos.map(t => [t, t + 9, m.get(t)]),
+              hovertemplate: "Puntaje %{customdata[0]}-%{customdata[1]}: %{y:.1%} de los estudiantes<br>(%{customdata[2]:,} estudiantes)<extra></extra>"};
+    });
+    Plotly.react("g-dist", trazasDist, L({title: {text: "Distribución del puntaje global"}, height: 454,
+      xaxis: {title: {text: "Puntaje global"}, gridcolor: "#EEF2F6"}, yaxis: {title: {text: "% de estudiantes"}, tickformat: ".0%", gridcolor: "#EEF2F6", automargin: true},
+      legend: {title: {text: "Colegio"}},
+      shapes: [{type: "line", yref: "paper", y0: 0, y1: 1, x0: CORTE, x1: CORTE, line: {dash: "dash", color: NAVY}}],
+      annotations: [{x: CORTE, yref: "paper", y: 1, xanchor: "left", showarrow: false, text: "corte " + CORTE}]}), CONFIG);
+
+    const cajas = [];
+    for (const nat of ["Oficial", "No Oficial"]) {
+      const filas = [];
+      for (const est of ORDEN.estrato) {
+        const m = new Map();
+        for (const i of di) if (DIST.get.naturaleza(i) === nat && DIST.get.estrato_txt(i) === est)
+          m.set(DIST.col.tramo[i], (m.get(DIST.col.tramo[i]) || 0) + DIST.col.estudiantes[i]);
+        const tr = [...m.keys()], ct = tr.map(t => m.get(t));
+        if (ct.reduce((a, b) => a + b, 0) >= MIN_EST) filas.push(Object.assign({estrato: est}, cuartiles(tr, ct)));
+      }
+      if (filas.length) cajas.push({type: "box", name: nat, x: filas.map(c => c.estrato), q1: filas.map(c => c.q1),
+        median: filas.map(c => c.mediana), q3: filas.map(c => c.q3), lowerfence: filas.map(c => c.inferior),
+        upperfence: filas.map(c => c.superior), marker: {color: COLOR_NAT[nat]}, line: {width: 1.5}, boxpoints: false});
+    }
+    if (!cajas.length) vacia("g-estrato", "Puntaje global por estrato y tipo de colegio");
+    else Plotly.react("g-estrato", cajas, L({title: {text: "Puntaje global por estrato y tipo de colegio"}, height: 430, boxmode: "group",
+      xaxis: {categoryorder: "array", categoryarray: ORDEN.estrato}, yaxis: {title: {text: "Puntaje global"}, gridcolor: "#EEF2F6", automargin: true},
+      legend: {orientation: "h", y: 1.02, x: 1, xanchor: "right", yanchor: "bottom", title: {text: "Colegio"}},
+      shapes: [{type: "line", xref: "paper", x0: 0, x1: 1, y0: CORTE, y1: CORTE, line: {dash: "dash", color: NAVY}}],
+      annotations: [{xref: "paper", x: 0, xanchor: "left", y: CORTE, yanchor: "bottom", showarrow: false, text: "corte " + CORTE, font: {color: NAVY}}]}), CONFIG);
+  }
+
+  if (estado.pestana === "factores") {
+    const conX = (lista, campo = "clave") => lista.map(g => Object.assign({x: g[campo]}, g));
+    const ed = ["Educación de la madre", "Educación del padre"].flatMap(vn =>
+      r.porVar(vn, i => r.val(i)).filter(g => g.clave !== "Sin dato").map(g => Object.assign({x: g.clave, serie: vn.endsWith("madre") ? "Madre" : "Padre"}, g)));
+    barras("g-educ", ed, "Bajo puntaje según educación de la madre y del padre", tasa,
+           {series: ["Madre", "Padre"], colores: {Madre: AZUL, Padre: DORADO}, orden: ORDEN.educacion, texto: false, alto: 420, angulo: -35});
+    const bi = ["Internet", "Computador", "Automóvil", "Lavadora"].flatMap(vn =>
+      r.porVar(vn, i => r.val(i)).filter(g => g.clave === "Si" || g.clave === "No")
+       .map(g => Object.assign({x: vn, serie: g.clave === "Si" ? "Lo tiene" : "No lo tiene"}, g)));
+    barras("g-bienes", bi, "Bajo puntaje según bienes del hogar", tasa,
+           {series: ["Lo tiene", "No lo tiene"], colores: {"Lo tiene": AZUL, "No lo tiene": DORADO}, orden: ["Internet", "Computador", "Automóvil", "Lavadora"], alto: 420});
+    const jo = conX(r.porVar("Jornada", i => r.val(i))).sort((a, b) => a.tasa - b.tasa);
+    barras("g-jornada", jo, "Bajo puntaje según jornada del colegio", tasa, {orden: jo.filter(g => g.estudiantes >= MIN_EST).map(g => g.x)});
+    barras("g-hacinamiento", conX(r.porVar("Personas por cuarto", i => r.val(i))).filter(g => g.x !== "Sin dato"),
+           "Bajo puntaje según personas por cuarto (hacinamiento)", tasa, {orden: ORDEN.hacinamiento});
+    barras("g-area", conX(agrupar(r.tot, i => RES.get.area(i))), "Bajo puntaje según zona del colegio", tasa);
+    barras("g-genero", conX(r.porVar("Género", i => r.val(i))).filter(g => g.x !== "Sin dato"), "Bajo puntaje según género", tasa);
+  }
+}
+
+// ---------- modelo ----------
+function auc(y, s) {  // probabilidad de que un "bajo" tenga mas riesgo que un "no bajo" (con empates a la mitad)
+  const o = s.map((v, i) => [v, y[i]]).sort((a, b) => a[0] - b[0]);
+  let rango = 0, pos = 0, i = 0;
+  while (i < o.length) { let j = i; while (j + 1 < o.length && o[j + 1][0] === o[i][0]) j++;
+    const r = (i + j + 2) / 2; for (let k = i; k <= j; k++) if (o[k][1] === 1) { rango += r; pos++; } i = j + 1; }
+  const neg = o.length - pos; return (rango - pos * (pos + 1) / 2) / (pos * neg);
+}
+
+function calcularModelo(f) {
+  const idx = mascara(PRED, f), u = f.umbral;
+  const y = idx.map(i => PRED.col.bajo_puntaje[i]), s = idx.map(i => PRED.col.probabilidad_bajo[i]);
+  const p = s.map(v => v >= u ? 1 : 0);
+  let tp = 0, fp = 0, fn = 0, tn = 0;
+  y.forEach((v, k) => { if (v && p[k]) tp++; else if (!v && p[k]) fp++; else if (v && !p[k]) fn++; else tn++; });
+  const ambas = tp + fn > 0 && tn + fp > 0;
+  const pre = tp + fp ? tp / (tp + fp) : 0, rec = tp + fn ? tp / (tp + fn) : 0;
+  return {idx, n: idx.length, ambas, auc: ambas ? auc(y, s) : NaN, acc: (tp + tn) / idx.length, pre, rec,
+          f1: pre + rec ? 2 * pre * rec / (pre + rec) : 0, cm: [[tn, fp], [fn, tp]], marcados: tp + fp};
+}
+
+let ordenTabla = {col: "probabilidad_bajo", asc: false};
+function pintarModelo() {
+  const m = calcularModelo(estado), u = estado.umbral;
+  document.getElementById("umbral-valor").textContent = dec(u);
+  if (estado.pestana === "modelo") {
+    const strip = document.getElementById("metricas");
+    if (m.ambas) {
+      strip.innerHTML = [["AUC", dec(m.auc)], ["Exactitud", pct(m.acc, 0)], ["Precisión", pct(m.pre, 0)], ["Detección", pct(m.rec, 0)], ["F1", dec(m.f1)]]
+        .map(([k, v]) => `<div><span>${k}</span><strong>${v}</strong></div>`).join("");
+      document.getElementById("narrativa").innerHTML = `<h3>Cómo leer estas cifras</h3>
+        <p>En esta vista hay ${num(m.n)} estudiantes del conjunto de prueba (estudiantes que el modelo nunca vio al entrenar). Con un umbral de ${dec(u)}, el modelo marca a ${num(m.marcados)}.</p>
+        <ul><li>AUC ${dec(m.auc)}: si se toma al azar un estudiante que sí sacó bajo puntaje y otro que no, el modelo le da más riesgo al primero el ${pct(m.auc, 0)} de las veces. 0,50 sería lanzar una moneda.</li>
+        <li>Detección ${pct(m.rec, 0)}: de cada 10 estudiantes que sí sacaron bajo puntaje, el modelo marca a ${Math.round(m.rec * 10)}.</li>
+        <li>Precisión ${pct(m.pre, 0)}: de cada 10 estudiantes marcados, ${Math.round(m.pre * 10)} sí sacaron bajo puntaje; los demás son falsas alarmas.</li>
+        <li>F1 resume detección y precisión en un solo número (1 sería perfecto).</li></ul>
+        <p>El puntaje de riesgo sirve para ordenar a los estudiantes de más a menos riesgo; no es una probabilidad exacta, porque el modelo se entrenó dando más peso a los estudiantes con bajo puntaje.</p>`;
+    } else {
+      strip.innerHTML = `<div><span>Sin muestra suficiente</span><strong>--</strong></div>`;
+      document.getElementById("narrativa").innerHTML = "<h3>Cómo leer estas cifras</h3><p>La selección no tiene estudiantes con y sin bajo puntaje para calcular las métricas.</p>";
+    }
+    const et = [["Acierta: no bajo", "Falsa alarma"], ["No detectado", "Acierta: bajo"]];
+    Plotly.react("g-confusion", [{type: "heatmap", z: m.cm, x: ["Marca: no bajo", "Marca: bajo"], y: ["Real: no bajo", "Real: bajo"],
+      text: m.cm.map((f, i) => f.map((v, j) => `${et[i][j]}<br><b>${num(v)}</b>`)), texttemplate: "%{text}", textfont: {color: NAVY, size: 14},
+      colorscale: [[0, "#F2F7FC"], [1, "#8FBCE8"]], showscale: false, hovertemplate: "%{y} / %{x}: %{z:,}<extra></extra>"}],
+      L({title: {text: `Matriz de confusión (umbral ${dec(u)})`}, height: 420, yaxis: {autorange: "reversed", automargin: true}}), CONFIG);
+  }
+  if (estado.pestana === "casos") {
+    const top = m.idx.slice().sort((a, b) => PRED.col.probabilidad_bajo[b] - PRED.col.probabilidad_bajo[a]).slice(0, 100).map(i => {
+      const e = PRED.col.estrato[i];
+      return {estudiante_id: PRED.col.estudiante_id[i], departamento: PRED.get.departamento(i), anio: PRED.col.anio[i],
+        calendario: PRED.get.calendario(i), naturaleza: PRED.get.naturaleza(i), area: PRED.get.area(i), jornada: PRED.get.jornada(i),
+        estrato: e === null ? "Sin dato" : (e === 0 ? "Sin estrato" : "Estrato " + e), punt_global: PRED.col.punt_global[i],
+        probabilidad_bajo: PRED.col.probabilidad_bajo[i], sobre_umbral: PRED.col.probabilidad_bajo[i] >= u ? "Sí" : "No",
+        bajo_real: PRED.col.bajo_puntaje[i] ? "Sí" : "No"};
+    });
+    const cols = [["estudiante_id", "Id estudiante"], ["departamento", "Departamento"], ["anio", "Año"], ["calendario", "Calendario"],
+      ["naturaleza", "Tipo de colegio"], ["area", "Zona"], ["jornada", "Jornada"], ["estrato", "Estrato"], ["punt_global", "Puntaje global"],
+      ["probabilidad_bajo", "Puntaje de riesgo"], ["sobre_umbral", "Marcado por el modelo"], ["bajo_real", "Bajo puntaje real"]];
+    const {col, asc} = ordenTabla;
+    top.sort((a, b) => (a[col] < b[col] ? -1 : a[col] > b[col] ? 1 : 0) * (asc ? 1 : -1));
+    const t = document.getElementById("tabla");
+    t.innerHTML = "<thead><tr>" + cols.map(([c, n]) => `<th data-col="${c}">${n}${c === col ? (asc ? " ▲" : " ▼") : ""}</th>`).join("") + "</tr></thead><tbody>" +
+      top.map(r => `<tr class="${r.sobre_umbral === "Sí" ? "marcado" : ""}">` + cols.map(([c]) =>
+        `<td class="${typeof r[c] === "number" ? "num" : ""}">${c === "probabilidad_bajo" ? dec(r[c]) : r[c]}</td>`).join("") + "</tr>").join("") + "</tbody>";
+    t.querySelectorAll("th").forEach(th => th.onclick = () => {
+      const c = th.dataset.col; ordenTabla = {col: c, asc: ordenTabla.col === c ? !ordenTabla.asc : false}; pintarModelo(); });
+  }
+}
+
+function pintarEstaticos() {
+  const mod = D.modelos.map(m => Object.assign({}, m, {version: m.version.replace("Linea", "Línea").replace("Logistica", "Logística")}));
+  const ganador = mod.slice().sort((a, b) => b.roc_auc_validacion_cruzada - a.roc_auc_validacion_cruzada)[0].version.slice(3);
+  const versiones = mod.map(m => m.version).sort();
+  const series = [["roc_auc_validacion_cruzada", "AUC validación cruzada", AZUL], ["roc_auc_prueba", "AUC prueba", DORADO], ["recall", "Detección (recall)", VERDE]];
+  Plotly.react("g-modelos", series.map(([c, n, color]) => {
+    const vals = versiones.map(v => mod.find(m => m.version === v)[c]);
+    return {type: "bar", name: n, x: versiones, y: vals, text: vals.map(dec), textposition: "outside", cliponaxis: false,
+            marker: {color, line: {width: 0}}, hovertemplate: "%{x}<br>%{y:.3f}<extra></extra>"};
+  }), L({title: {text: `Comparación de las 3 versiones (ganador: ${ganador})`}, height: 420, barmode: "group", yaxis: {range: [0, 1], gridcolor: "#EEF2F6"},
+         legend: {orientation: "h", y: -0.12, x: 0.5, xanchor: "center", yanchor: "top"}}), CONFIG);
+  const imp = D.importancia.slice().sort((a, b) => a.importancia - b.importancia);
+  Plotly.react("g-importancia", [{type: "bar", orientation: "h", x: imp.map(d => d.importancia), y: imp.map(d => NOMBRES[d.variable] || d.variable),
+    marker: {color: AZUL, line: {width: 0}}, hovertemplate: "%{y}: %{x:.4f}<extra></extra>"}],
+    L({title: {text: "Qué variables usa más el modelo"}, height: 420, xaxis: {title: {text: "Cuánto empeora el AUC si se desordena la variable"}, gridcolor: "#EEF2F6"},
+       yaxis: {automargin: true}}), CONFIG);
+}
+
+// ---------- eventos ----------
+function leerFiltros() {
+  for (const k in MS) estado[k] = MS[k].leer();
+  estado.desde = +document.getElementById("anio-desde").value; estado.hasta = +document.getElementById("anio-hasta").value;
+  if (estado.desde > estado.hasta) [estado.desde, estado.hasta] = [estado.hasta, estado.desde];
+}
+function actualizar() { leerFiltros(); pintarDatos(); pintarModelo(); }
+
+const selD = document.getElementById("anio-desde"), selH = document.getElementById("anio-hasta");
+ANIOS.forEach(a => { selD.add(new Option("Desde " + a, a)); selH.add(new Option("Hasta " + a, a)); });
+selD.value = ANIOS[0]; selH.value = ANIOS[ANIOS.length - 1];
+[selD, selH].forEach(s => s.onchange = actualizar);
+["f-depto", "f-naturaleza", "f-area", "f-calendario"].forEach(id => document.getElementById(id).addEventListener("cambio", actualizar));
+document.querySelectorAll("input[name=metrica]").forEach(r => r.onchange = () => { estado.metrica = r.value; pintarDatos(); });
+document.getElementById("umbral").oninput = e => { estado.umbral = +e.target.value; pintarModelo(); };
+document.getElementById("reset").onclick = () => {
+  for (const k in MS) MS[k].poner([]); selD.value = ANIOS[0]; selH.value = ANIOS[ANIOS.length - 1];
+  document.getElementById("umbral").value = 0.5; estado.umbral = 0.5; actualizar();
+};
+document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => {
+  document.querySelectorAll(".tabs button").forEach(x => x.classList.toggle("activa", x === b));
+  document.querySelectorAll(".pestana").forEach(p => p.classList.toggle("activa", p.id === b.dataset.tab));
+  estado.pestana = b.dataset.tab; pintarDatos(); pintarModelo(); if (estado.pestana === "modelo") pintarEstaticos();
+});
+
+// ---------- textos fijos ----------
+const fuente = D.corte.fuente === "muestra_saber11.csv" ? `muestra aleatoria de ${num(D.corte.estudiantes)} estudiantes`
+                                                       : `los ${num(D.corte.estudiantes)} estudiantes del archivo completo`;
+document.getElementById("subtitulo").textContent = `'Bajo puntaje' = puntaje global menor a ${CORTE}, el 25% más bajo de todos los años juntos ` +
+  `(el ICFES reporta el puntaje global en una escala comparable entre años desde 2014-2). Resultados 2014-2 a 2022.`;
+document.getElementById("kpi-rate-nota").textContent = "puntaje global < " + CORTE;
+document.getElementById("kpi-corte").textContent = CORTE;
+document.getElementById("nota-factores").textContent = `Cada barra es el % de estudiantes del grupo con puntaje global menor a ${CORTE}. ` +
+  `La línea punteada es el % de toda la vista filtrada. Se ocultan grupos con menos de ${MIN_EST} estudiantes. Son asociaciones, no causas.`;
+document.getElementById("footer").textContent = `Fuente: ICFES, 'Resultados únicos Saber 11' (datos.gov.co), sin registros duplicados. ` +
+  `Datos del tablero: ${fuente}. Modelo y casos de riesgo: muestra aleatoria de 60.000 estudiantes.`;
+
+// Para comprobar los calculos desde fuera (pruebas automaticas)
+window.TABLERO = {estado, calcularDatos, calcularModelo, actualizar, MS, agrupar, mascara, RES, DIST, cuartiles};
+actualizar();
+</script>
+</body>
+</html>
